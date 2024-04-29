@@ -1,4 +1,5 @@
 import json
+import os.path
 from typing import Optional
 
 from torch_thunder.module import ThunderModule
@@ -30,6 +31,8 @@ def save_hparams_from_kwargs(
         filename (str): JSON file to save hyperparameters to
         **kwargs: Hyperparameters to save
     """
+    if not os.path.isdir(os.path.dirname(filename)):
+        os.makedirs(os.path.dirname(filename))
     with open(filename, "w") as f:
         json.dump(kwargs, f, indent=4)
 
@@ -45,6 +48,8 @@ def save_hparams_from_dict(
         filename (str): JSON file to save hyperparameters to
         hparams (dict): Hyperparameters to save
     """
+    if not os.path.isdir(os.path.dirname(filename)):
+        os.makedirs(os.path.dirname(filename))
     with open(filename, "w") as f:
         json.dump(hparams, f, indent=4)
 
@@ -66,7 +71,8 @@ def save_hparams_from_model(
             "Trying to save hyperparameters from a model, "
             + "but `model.hyperparameters()` returned None. "
             + "To save hyperparameters from a model, "
-            + "the model must have a `hyperparameters()` method that returns a dictionary."
+            + "the model must have a `hyperparameters()` method "
+            "that returns a dictionary."
         )
         raise ValueError(message)
 
