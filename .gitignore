@@ -1,0 +1,11 @@
+# IntelliJ IDEA
+.idea
+
+# Python caches
+**/__pycache__
+
+# Checkpoints
+tests/checkpoints
+
+# Data
+data
