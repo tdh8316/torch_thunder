@@ -97,7 +97,7 @@ def _save_loss_history(
                 if i + 1 != epoch
                 else loss_history["val"][-1]
             )
-            f.write(f"{i},{loss_history['train'][i]:.6f},{val_loss:.6f}\n")
+            f.write(f"{i+1},{loss_history['train'][i]:.6f},{val_loss:.6f}\n")
 
 
 def thunder_train(
@@ -247,8 +247,15 @@ def thunder_train(
         _train_loss_history: list[float] = []
 
         batch: tuple[Tensor, ...]
+        # If the last epoch, leave the progress bar
+        leave_bar: bool = epoch == n_epochs - 1
         for batch_idx, batch in enumerate(
-            batch_bar := tqdm(train_loader, desc="Batch", ascii=True, leave=False),
+            batch_bar := tqdm(
+                train_loader,
+                desc="Batch",
+                ascii=True,
+                leave=leave_bar,
+            ),
         ):
             batch = tuple(
                 (t.to(torch_device) if isinstance(t, Tensor) else t) for t in batch
@@ -304,7 +311,10 @@ def thunder_train(
             with torch.no_grad():
                 for batch_idx, batch in enumerate(
                     val_bar := tqdm(
-                        val_loader, desc="Validation", ascii=True, leave=False
+                        val_loader,
+                        desc="Validation",
+                        ascii=True,
+                        leave=leave_bar,
                     ),
                 ):
                     batch = tuple(
