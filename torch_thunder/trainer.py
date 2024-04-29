@@ -89,7 +89,7 @@ def _save_loss_history(
     plt.savefig(f"{ckpt_dir}/loss_history.png")
     plt.close()
 
-    with open(f"{ckpt_dir}/loss_history.txt", "w") as f:
+    with open(f"{ckpt_dir}/loss_history.csv", "w") as f:
         f.write("epoch,train,val\n")
         for i in range(epoch):
             val_loss = (
@@ -117,7 +117,7 @@ def thunder_train(
     device: Literal["cuda", "cpu", "mps"] = "cuda",
     use_amp: bool = False,
     verbose: bool = True,
-) -> str:
+) -> Optional[str]:
     """
     Thunder training loop
 
@@ -150,6 +150,9 @@ def thunder_train(
             Defaults to False.
         verbose (bool, optional): Verbose output.
             Defaults to True.
+
+    Returns:
+        str: Checkpoint directory
     """
     global _verbose
     _verbose = verbose
@@ -169,7 +172,7 @@ def thunder_train(
         logging(
             f"[!] Checkpoint directory '{ckpt_dir.rstrip('/')}' already exists. Aborted."
         )
-        return ckpt_dir
+        return None
     else:
         logging(f"[i] Checkpoint directory: {ckpt_dir.rstrip('/')}")
         os.makedirs(ckpt_dir, exist_ok=True)
