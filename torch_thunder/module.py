@@ -48,6 +48,6 @@ class ThunderModule(ABC, nn.Module):
 
     @abstractmethod
     def prediction_step(
-        self, batch: tuple[Tensor, ...], batch_idx: int, epoch: int, **kwargs
+        self, batch: tuple[Tensor, ...], **kwargs
     ) -> Any | Tensor:
         raise NotImplementedError
