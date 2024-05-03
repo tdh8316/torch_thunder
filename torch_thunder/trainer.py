@@ -169,13 +169,19 @@ def thunder_train(
 
     ckpt_dir = f"{ckpt_basedir}/{ckpt_subdir}/" if ckpt_subdir else f"{ckpt_basedir}/"
     if os.path.exists(ckpt_dir):
-        logging(
-            f"[!] Checkpoint directory '{ckpt_dir.rstrip('/')}' already exists. Aborted."
-        )
-        return None
-    else:
-        logging(f"[i] Checkpoint directory: {ckpt_dir.rstrip('/')}")
-        os.makedirs(ckpt_dir, exist_ok=True)
+        flag = False
+        for f in os.listdir(ckpt_dir):
+            if f.endswith(".ckpt"):
+                flag = True
+                break
+        if flag:
+            logging(
+                f"[!] Checkpoint directory '{ckpt_dir.rstrip('/')}' already exists. Aborted."
+            )
+            return None
+
+    logging(f"[i] Checkpoint directory: {ckpt_dir.rstrip('/')}")
+    os.makedirs(ckpt_dir, exist_ok=True)
 
     with open(f"{ckpt_dir}/trainer.txt", "w") as f:
         f.write(
@@ -201,7 +207,7 @@ def thunder_train(
         except Exception as e:
             logging(f"[!] Model compilation failed: {e}")
             raise e
-        logging("[i] Model compiled")
+        logging("[i] Model compiled successfully")
 
     if device == "cuda":
         assert torch.cuda.is_available(), "CUDA is not available"
