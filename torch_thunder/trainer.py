@@ -121,6 +121,7 @@ def thunder_train(
     device: Literal["cuda", "cpu", "mps"] = "cuda",
     use_amp: bool = False,
     exist_ok: bool = False,
+    save_last_ckpt: bool = True,
     save_trainer_args: bool = True,
     save_loss_csv: bool = True,
     verbose: bool = True,
@@ -158,6 +159,10 @@ def thunder_train(
             Defaults to False.
         exist_ok (bool, optional): Overwrite the existing checkpoint directory.
             Defaults to False.
+        save_last_ckpt (bool, optional): Save the last checkpoint.
+            Defaults to True.
+            Otherwise, the last checkpoint will be removed and
+            only the best checkpoint will be saved.
         save_trainer_args (bool, optional): Save trainer arguments.
             Defaults to True.
         save_loss_csv (bool, optional): Save loss history as not only a plot but also a csv.
@@ -363,14 +368,15 @@ def thunder_train(
             loss_history["val"].append(np.mean(_val_loss_history))
 
             """Save the last checkpoint"""
-            if _prev_last_ckpt_name:
-                os.remove(f"{ckpt_dir}/{_prev_last_ckpt_name}")
-            _prev_last_ckpt_name = "last_" + ckpt_name_format.format(
-                epoch=epoch,
-                val_loss=f"{loss_history['val'][-1]:.6f}",
-                train_loss=f"{loss_history['train'][-1]:.6f}",
-            )
-            torch.save(model.state_dict(), f"{ckpt_dir}/{_prev_last_ckpt_name}")
+            if save_last_ckpt:
+                if _prev_last_ckpt_name:
+                    os.remove(f"{ckpt_dir}/{_prev_last_ckpt_name}")
+                _prev_last_ckpt_name = "last_" + ckpt_name_format.format(
+                    epoch=epoch,
+                    val_loss=f"{loss_history['val'][-1]:.6f}",
+                    train_loss=f"{loss_history['train'][-1]:.6f}",
+                )
+                torch.save(model.state_dict(), f"{ckpt_dir}/{_prev_last_ckpt_name}")
 
             """Save the best checkpoint"""
             if loss_history["val"][-1] == min(loss_history["val"]):
