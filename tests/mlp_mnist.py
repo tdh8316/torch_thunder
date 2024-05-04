@@ -46,25 +46,19 @@ class MLP(ThunderModule):
         x = x.view(-1, 28 * 28)
         return self.layers(x)
 
-    def training_step(
-        self, batch: tuple[Tensor, ...], batch_idx: int, epoch: int, **kwargs
-    ) -> Loss:
+    def training_step(self, batch: tuple[Tensor, ...], **_) -> Loss:
         x, y = batch
         pred = self(x)
         loss = self.loss_fn(pred, y)
         return loss
 
-    def validation_step(
-        self, batch: tuple[Tensor, ...], batch_idx: int, epoch: int, **kwargs
-    ) -> Loss:
+    def validation_step(self, batch: tuple[Tensor, ...], **_) -> Loss:
         _, y = batch
-        pred = self.prediction_step(batch, batch_idx, epoch)
+        pred = self.prediction_step(batch)
         loss = self.loss_fn(pred, y)
         return loss
 
-    def prediction_step(
-        self, batch: tuple[Tensor, ...], batch_idx: int, epoch: int, **kwargs
-    ) -> Tensor:
+    def prediction_step(self, batch: tuple[Tensor, ...], **_) -> Tensor:
         x, _ = batch
         pred = self(x)
         return pred
@@ -110,7 +104,8 @@ def main():
         device="cpu",
     )
 
-    save_hparams_from_dict(f"{ckpt_dir}/hparams.json", hparams)
+    if ckpt_dir:
+        save_hparams_from_dict(f"{ckpt_dir}/hparams.json", hparams)
 
 
 if __name__ == "__main__":

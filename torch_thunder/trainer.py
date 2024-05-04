@@ -51,15 +51,18 @@ def _save_loss_history(
     ckpt_dir: str,
     epoch: int,
     val_interval: int,
+    csv: bool = True,
 ):
     """
-    Save the loss history plot and its data
+    Save the loss history plot and its data as a csv (optional)
 
     Args:
         loss_history (dict[str, list[float]]): Loss history data
         ckpt_dir (str): Checkpoint directory
         epoch (int): Current epoch
         val_interval (int): Validation interval
+        csv (bool): Save not only the plot but also the data as a csv.
+            Defaults to True.
     """
     assert (
         len(loss_history["train"]) == epoch + 1
@@ -89,15 +92,16 @@ def _save_loss_history(
     plt.savefig(f"{ckpt_dir}/loss_history.png")
     plt.close()
 
-    with open(f"{ckpt_dir}/loss_history.csv", "w") as f:
-        f.write("epoch,train,val\n")
-        for i in range(epoch):
-            val_loss = (
-                loss_history["val"][i // val_interval]
-                if i + 1 != epoch
-                else loss_history["val"][-1]
-            )
-            f.write(f"{i+1},{loss_history['train'][i]:.6f},{val_loss:.6f}\n")
+    if csv:
+        with open(f"{ckpt_dir}/loss_history.csv", "w") as f:
+            f.write("epoch,train,val\n")
+            for i in range(epoch):
+                val_loss = (
+                    loss_history["val"][i // val_interval]
+                    if i + 1 != epoch
+                    else loss_history["val"][-1]
+                )
+                f.write(f"{i+1},{loss_history['train'][i]:.6f},{val_loss:.6f}\n")
 
 
 def thunder_train(
@@ -116,6 +120,9 @@ def thunder_train(
     compile_model: bool = True,
     device: Literal["cuda", "cpu", "mps"] = "cuda",
     use_amp: bool = False,
+    exist_ok: bool = False,
+    save_trainer_args: bool = True,
+    save_loss_csv: bool = True,
     verbose: bool = True,
 ) -> Optional[str]:
     """
@@ -133,6 +140,7 @@ def thunder_train(
             Full path will be `ckpt_basedir/ckpt_subdir`.
             Defaults to None.
         ckpt_name_format (str, optional): Checkpoint name format.
+            Allowed keys: {epoch}, {val_loss}, {train_loss}.
             Defaults to "epoch={epoch}_val={val_loss}_train={train_loss}.ckpt".
         ckpt_save_interval (int, optional): Checkpoint save interval.
             Defaults to 1.
@@ -148,6 +156,12 @@ def thunder_train(
             Defaults to "cuda".
         use_amp (bool, optional): Use Automatic Mixed Precision.
             Defaults to False.
+        exist_ok (bool, optional): Overwrite the existing checkpoint directory.
+            Defaults to False.
+        save_trainer_args (bool, optional): Save trainer arguments.
+            Defaults to True.
+        save_loss_csv (bool, optional): Save loss history as not only a plot but also a csv.
+            Defaults to True.
         verbose (bool, optional): Verbose output.
             Defaults to True.
 
@@ -174,28 +188,34 @@ def thunder_train(
             if f.endswith(".ckpt"):
                 flag = True
                 break
-        if flag:
+        if flag and not exist_ok:
             logging(
                 f"[!] Checkpoint directory '{ckpt_dir.rstrip('/')}' already exists. Aborted."
             )
             return None
+        elif flag and exist_ok:
+            logging(
+                f"[!] Checkpoint directory '{ckpt_dir.rstrip('/')}' already exists. Overwriting."
+            )
+    else:
+        logging(f"[i] Checkpoint directory: {ckpt_dir.rstrip('/')}")
 
-    logging(f"[i] Checkpoint directory: {ckpt_dir.rstrip('/')}")
     os.makedirs(ckpt_dir, exist_ok=True)
 
-    with open(f"{ckpt_dir}/trainer.txt", "w") as f:
-        f.write(
-            f"model: {model.__class__.__name__}\n"
-            f"model_params: {_get_model_params(model)}\n"
-            f"n_epochs: {n_epochs}\n"
-            f"optimizer: {optimizer.__class__.__name__}\n"
-            f"clip_grad_value: {clip_grad_value}\n"
-            f"clip_grad_norm: {clip_grad_norm}\n"
-            f"scheduler: {scheduler.__class__.__name__ if scheduler else None}\n"
-            f"compile_model: {compile_model}\n"
-            f"device: {device}\n"
-            f"use_amp: {use_amp}\n"
-        )
+    if save_trainer_args:
+        with open(f"{ckpt_dir}/trainer.txt", "w") as f:
+            f.write(
+                f"model: {model.__class__.__name__}\n"
+                f"params: {_get_model_params(model)}\n"
+                f"epochs: {n_epochs}\n"
+                f"optimizer: {optimizer.__class__.__name__}\n"
+                f"clip_grad_value: {clip_grad_value}\n"
+                f"clip_grad_norm: {clip_grad_norm}\n"
+                f"scheduler: {scheduler.__class__.__name__ if scheduler else None}\n"
+                f"compile_model: {compile_model}\n"
+                f"device: {device}\n"
+                f"use_amp: {use_amp}\n"
+            )
 
     if compile_model:
         # Model compilation is available on torch>=2.0.0
@@ -242,7 +262,12 @@ def thunder_train(
         "val": [],
     }
 
-    epoch_bar = tqdm(range(0, n_epochs), desc="Epoch", ascii=True)
+    epoch_bar = tqdm(
+        range(0, n_epochs),
+        desc="Epoch",
+        ascii=True,
+        position=0,
+    )
 
     _prev_last_ckpt_name: str = ""
     _prev_best_ckpt_name: str = ""
@@ -261,6 +286,7 @@ def thunder_train(
                 desc="Batch",
                 ascii=True,
                 leave=leave_bar,
+                position=1,
             ),
         ):
             batch = tuple(
@@ -270,10 +296,10 @@ def thunder_train(
 
             if use_amp:
                 with torch.autocast(device_type=torch_device.type):
-                    loss = model.training_step(batch, batch_idx, epoch)
+                    loss = model.training_step(batch, batch_idx=batch_idx, epoch=epoch)
                 scaler.scale(loss).backward()
             else:
-                loss = model.training_step(batch, batch_idx, epoch)
+                loss = model.training_step(batch, batch_idx=batch_idx, epoch=epoch)
                 loss.backward()
 
             _train_loss_history.append(float(loss.item()))
@@ -320,14 +346,17 @@ def thunder_train(
                         val_loader,
                         desc="Validation",
                         ascii=True,
-                        leave=leave_bar,
+                        leave=False,
+                        position=1,
                     ),
                 ):
                     batch = tuple(
                         (t.to(torch_device) if isinstance(t, Tensor) else t)
                         for t in batch
                     )
-                    loss = model.validation_step(batch, batch_idx, epoch)
+                    loss = model.validation_step(
+                        batch, batch_idx=batch_idx, epoch=epoch
+                    )
                     _val_loss_history.append(float(loss.item()))
                     val_bar.set_postfix(loss=f"{loss.item():.6f}")
 
@@ -360,6 +389,7 @@ def thunder_train(
                 ckpt_dir,
                 epoch,
                 val_interval=ckpt_save_interval,
+                csv=save_loss_csv,
             )
 
         epoch_bar.set_postfix(
