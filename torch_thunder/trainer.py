@@ -131,6 +131,7 @@ def thunder_train(
     save_last_ckpt: bool = True,
     save_trainer_args: bool = True,
     save_loss_csv: bool = True,
+    abort_on_nan: bool = True,
     verbose: bool = True,
 ) -> Optional[str]:
     """
@@ -173,6 +174,8 @@ def thunder_train(
         save_trainer_args (bool, optional): Save trainer arguments.
             Defaults to True.
         save_loss_csv (bool, optional): Save loss history as not only a plot but also a csv.
+            Defaults to True.
+        abort_on_nan (bool, optional): Abort if the loss history contains NaN or Inf values.
             Defaults to True.
         verbose (bool, optional): Verbose output.
             Defaults to True.
@@ -403,6 +406,7 @@ def thunder_train(
                 epoch,
                 val_interval=ckpt_save_interval,
                 csv=save_loss_csv,
+                abort_on_nan=abort_on_nan,
             )
 
         epoch_bar.set_postfix(
