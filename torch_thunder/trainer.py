@@ -52,6 +52,7 @@ def _save_loss_history(
     epoch: int,
     val_interval: int,
     csv: bool = True,
+    abort_on_nan: bool = True,
 ):
     """
     Save the loss history plot and its data as a csv (optional)
@@ -63,6 +64,7 @@ def _save_loss_history(
         val_interval (int): Validation interval
         csv (bool): Save not only the plot but also the data as a csv.
             Defaults to True.
+        abort_on_nan (bool): Abort if the loss history contains NaN or Inf values.
     """
     assert (
         len(loss_history["train"]) == epoch + 1
@@ -81,7 +83,12 @@ def _save_loss_history(
         [np.mean(loss_history["train"]), np.mean(loss_history["val"])],
     )
     if np.isnan(y_means).any() or np.isinf(y_means).any():
-        raise ValueError("Loss history contains NaN or Inf values")
+        if abort_on_nan:
+            raise ValueError("Loss history contains NaN or Inf values")
+        else:
+            tqdm.write("[!] Loss history contains NaN or Inf values")
+            # Replace NaN or Inf values with 0
+            y_means = np.nan_to_num(y_means, nan=0.0, posinf=0.0, neginf=0.0)
     plt.ylim(0, y_means.max() * 2)
     plt.title("Loss history")
     plt.xlabel("Epoch")

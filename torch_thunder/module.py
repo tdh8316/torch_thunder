@@ -47,7 +47,5 @@ class ThunderModule(ABC, nn.Module):
         raise NotImplementedError
 
     @abstractmethod
-    def prediction_step(
-        self, batch: tuple[Tensor, ...], **kwargs
-    ) -> Any | Tensor:
+    def prediction_step(self, batch: tuple[Tensor, ...], **kwargs) -> Any | Tensor:
         raise NotImplementedError

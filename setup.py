@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name="torch_thunder",
-    version="0.1.6",
+    version="0.1.7",
     packages=["torch_thunder"],
     url="https://github.com/tdh8316/torch_thunder/",
     license="MIT License",
