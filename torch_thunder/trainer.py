@@ -85,10 +85,8 @@ def _save_loss_history(
     if np.isnan(y_means).any() or np.isinf(y_means).any():
         if abort_on_nan:
             raise ValueError("Loss history contains NaN or Inf values")
-        else:
-            tqdm.write("[!] Loss history contains NaN or Inf values")
-            # Replace NaN or Inf values with 0
-            y_means = np.nan_to_num(y_means, nan=0.0, posinf=0.0, neginf=0.0)
+        # Replace NaN or Inf values with 0
+        y_means = np.nan_to_num(y_means, nan=0.0, posinf=0.0, neginf=0.0)
     plt.ylim(0, y_means.max() * 2)
     plt.title("Loss history")
     plt.xlabel("Epoch")
@@ -343,6 +341,10 @@ def thunder_train(
             )
 
         loss_history["train"].append(np.mean(_train_loss_history))
+        if np.isnan(loss_history["train"][-1]):
+            tqdm.write("[!] Training loss contains NaN values!")
+        if np.isinf(loss_history["train"][-1]):
+            tqdm.write("[!] Training loss contains Inf values!")
 
         """
         Validation/Save step
