@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from torch import nn, Tensor
+from torch._dynamo import OptimizedModule
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
@@ -187,7 +188,7 @@ def thunder_train(
     logging("[i] Training model parameters: " + _get_model_params(model))
 
     assert isinstance(
-        model, ThunderModule
+        model, (ThunderModule, OptimizedModule)
     ), "Model should be an instance of ThunderModule"
 
     assert (
