@@ -88,7 +88,13 @@ def _save_loss_history(
             raise ValueError("Loss history contains NaN or Inf values")
         # Replace NaN or Inf values with 0
         y_means = np.nan_to_num(y_means, nan=0.0, posinf=0.0, neginf=0.0)
-    plt.ylim(0, y_means.max() * 2)
+    y_mins = np.array(
+        [np.min(loss_history["train"]), np.min(loss_history["val"])],
+    )
+    plt.ylim(
+        y_mins.min() - y_means.max() * 0.1,
+        y_means.max() * 2,
+    )
     plt.title("Loss history")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
