@@ -139,6 +139,7 @@ def thunder_train(
     save_trainer_args: bool = True,
     save_loss_csv: bool = True,
     abort_on_nan: bool = True,
+    log_max_vram_usage: bool = False,
     verbose: bool = True,
 ) -> Optional[str]:
     """
@@ -186,6 +187,8 @@ def thunder_train(
             Defaults to True.
         abort_on_nan (bool, optional): Abort if the loss history contains NaN or Inf values.
             Defaults to True.
+        log_max_vram_usage (bool, optional): Log the maximum VRAM usage in GB.
+            Defaults to False.
         verbose (bool, optional): Verbose output.
             Defaults to True.
 
@@ -304,6 +307,8 @@ def thunder_train(
 
     _prev_last_ckpt_name: str = ""
     _prev_best_ckpt_name: str = ""
+
+    max_vram_usage: float = 0.0  # GB
 
     """Training loop"""
     for epoch in epoch_bar:
@@ -433,10 +438,18 @@ def thunder_train(
                 abort_on_nan=abort_on_nan,
             )
 
+            if log_max_vram_usage:
+                gfree, total = torch.cuda.mem_get_info(torch_device)
+                max_vram_usage = max(max_vram_usage, (total - gfree) / 1024**3)
+
         epoch_bar.set_postfix(
             train_loss=f"{loss_history['train'][-1]:.6f}",
             val_loss=f"{loss_history['val'][-1]:.6f}",
         )
+
+    if log_max_vram_usage:
+        with open(f"{ckpt_dir}/trainer.txt", "a") as f:
+            f.write(f"max_vram_usage: {max_vram_usage:.2f}GB\n")
 
     logging("[i] Training completed")
 
