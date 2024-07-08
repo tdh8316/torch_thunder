@@ -439,7 +439,7 @@ def thunder_train(
             )
 
             if log_max_vram_usage:
-                gfree, total = torch.cuda.mem_get_info(torch_device)
+                gfree, total = torch.cuda.mem_get_info(torch_device.index)
                 max_vram_usage = max(max_vram_usage, (total - gfree) / 1024**3)
 
         epoch_bar.set_postfix(
