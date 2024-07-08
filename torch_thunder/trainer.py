@@ -232,19 +232,20 @@ def thunder_train(
         model: OptimizedModule
         model_class_name = getattr(model, "_orig_mod").__class__.__name__
 
-    if compile_model and not is_model_compiled:
+    if compile_model and is_model_compiled:
+        logging("[i] Model is already compiled. Skipping...")
+    elif compile_model and not is_model_compiled:
         assert hasattr(torch, "compile"), "[!] Could not find 'torch.compile'"
         try:
             model: ThunderModule = torch.compile(  # type: ignore
                 model,
                 **(compile_options or {}),
             )
+            is_model_compiled = True
         except Exception as e:
             logging(f"[!] Model compilation failed: {e}")
         else:
             logging("[i] Model compiled successfully")
-    elif compile_model and is_model_compiled:
-        logging("[i] Model is already compiled. Skipping...")
 
     if save_trainer_args:
         with open(f"{ckpt_dir}/trainer.txt", "w") as f:
