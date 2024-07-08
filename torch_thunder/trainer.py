@@ -226,7 +226,12 @@ def thunder_train(
 
     os.makedirs(ckpt_dir, exist_ok=True)
 
+    model_class_name = model.__class__.__name__
     is_model_compiled = isinstance(model, OptimizedModule)
+    if is_model_compiled:
+        model: OptimizedModule
+        model_class_name = getattr(model, "_orig_mod").__class__.__name__
+
     if compile_model and not is_model_compiled:
         assert hasattr(torch, "compile"), "[!] Could not find 'torch.compile'"
         try:
@@ -244,7 +249,7 @@ def thunder_train(
     if save_trainer_args:
         with open(f"{ckpt_dir}/trainer.txt", "w") as f:
             f.write(
-                f"model: {model.__class__.__name__}\n"
+                f"model: {model_class_name}\n"
                 f"params: {_get_model_params(model)}\n"
                 f"epochs: {n_epochs}\n"
                 f"optimizer: {optimizer.__class__.__name__}\n"
