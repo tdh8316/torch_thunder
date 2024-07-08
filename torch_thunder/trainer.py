@@ -80,6 +80,7 @@ def _save_loss_history(
         loss_history["val"],
         label="validation",
     )
+
     y_means = np.array(
         [np.mean(loss_history["train"]), np.mean(loss_history["val"])],
     )
@@ -130,6 +131,7 @@ def thunder_train(
     clip_grad_norm: Optional[float] = None,
     scheduler: Optional[LRScheduler] = None,
     compile_model: bool = True,
+    compile_options: Optional[dict] = None,
     device: Literal["cuda", "cpu", "mps"] = "cuda",
     use_amp: bool = False,
     exist_ok: bool = False,
@@ -166,6 +168,8 @@ def thunder_train(
             Defaults to None.
         compile_model (bool, optional): Compile model.
             Defaults to True.
+        compile_options (Optional[dict], optional): Compilation options.
+            Defaults to None.
         device (Literal["cuda", "cpu", "mps"], optional): Device to use.
             Defaults to "cuda".
         use_amp (bool, optional): Use Automatic Mixed Precision.
@@ -186,7 +190,7 @@ def thunder_train(
             Defaults to True.
 
     Returns:
-        str: Checkpoint directory
+        str: Checkpoint directory where the model was saved.
     """
     global _verbose
     _verbose = verbose
@@ -203,17 +207,17 @@ def thunder_train(
 
     ckpt_dir = f"{ckpt_basedir}/{ckpt_subdir}/" if ckpt_subdir else f"{ckpt_basedir}/"
     if os.path.exists(ckpt_dir):
-        flag = False
+        exist_flag = False
         for f in os.listdir(ckpt_dir):
             if f.endswith(".ckpt"):
-                flag = True
+                exist_flag = True
                 break
-        if flag and not exist_ok:
+        if exist_flag and not exist_ok:
             logging(
                 f"[!] Checkpoint directory '{ckpt_dir.rstrip('/')}' already exists. Aborted."
             )
             return None
-        elif flag and exist_ok:
+        elif exist_flag and exist_ok:
             logging(
                 f"[!] Checkpoint directory '{ckpt_dir.rstrip('/')}' already exists. Overwriting."
             )
@@ -221,6 +225,21 @@ def thunder_train(
         logging(f"[i] Checkpoint directory: {ckpt_dir.rstrip('/')}")
 
     os.makedirs(ckpt_dir, exist_ok=True)
+
+    is_model_compiled = isinstance(model, OptimizedModule)
+    if compile_model and not is_model_compiled:
+        assert hasattr(torch, "compile"), "[!] Could not find 'torch.compile'"
+        try:
+            model: ThunderModule = torch.compile(  # type: ignore
+                model,
+                **(compile_options or {}),
+            )
+        except Exception as e:
+            logging(f"[!] Model compilation failed: {e}")
+        else:
+            logging("[i] Model compiled successfully")
+    elif compile_model and is_model_compiled:
+        logging("[i] Model is already compiled. Skipping...")
 
     if save_trainer_args:
         with open(f"{ckpt_dir}/trainer.txt", "w") as f:
@@ -232,22 +251,10 @@ def thunder_train(
                 f"clip_grad_value: {clip_grad_value}\n"
                 f"clip_grad_norm: {clip_grad_norm}\n"
                 f"scheduler: {scheduler.__class__.__name__ if scheduler else None}\n"
-                f"compile_model: {compile_model}\n"
+                f"compile_model: {compile_model} (actually compiled? {is_model_compiled})\n"
                 f"device: {device}\n"
                 f"use_amp: {use_amp}\n"
             )
-
-    if compile_model:
-        # Model compilation is available on torch>=2.0.0
-        assert hasattr(
-            torch, "compile"
-        ), "Model compilation is not available in this version of torch"
-        try:
-            model: ThunderModule = torch.compile(model)  # type: ignore
-        except Exception as e:
-            logging(f"[!] Model compilation failed: {e}")
-            raise e
-        logging("[i] Model compiled successfully")
 
     if device == "cuda":
         assert torch.cuda.is_available(), "CUDA is not available"
@@ -255,24 +262,24 @@ def thunder_train(
         assert hasattr(torch.backends, "mps"), "MPS is not available"
         if not torch.backends.mps.is_available():
             if not torch.backends.mps.is_built():
-                print(
-                    "MPS not available because the current PyTorch install was not "
+                logging(
+                    "[!] MPS not available because the current PyTorch install was not "
                     "built with MPS enabled."
                 )
             else:
-                print(
-                    "MPS not available because the current MacOS version is not 12.3+ "
+                logging(
+                    "[!] MPS not available because the current MacOS version is not 12.3+ "
                     "and/or you do not have an MPS-enabled device on this machine."
                 )
     torch_device: torch.device = torch.device(device)
     if torch_device.type == "cuda":
         _name = torch.cuda.get_device_name(0)
         _ram = torch.cuda.get_device_properties(0).total_memory / 1024**3
-        logging(f"[i] CUDA device name: {_name} (VRAM {_ram:.2f}GB)")
+        logging(f"[i] Using CUDA device ({_name}, {_ram:.2f}GB VRAM)")
     elif torch_device.type == "mps":
         logging("[i] Using MPS backend")
     else:
-        logging("[!] Using CPU can lead to slower training")
+        logging("[!] Using CPUs can result in slower training.")
     model.to(torch_device)
 
     scaler = torch.cuda.amp.GradScaler() if use_amp else None
@@ -292,14 +299,16 @@ def thunder_train(
     _prev_last_ckpt_name: str = ""
     _prev_best_ckpt_name: str = ""
 
+    """Training loop"""
     for epoch in epoch_bar:
         epoch_bar.set_description(f"Epoch {epoch}")
         model.train()
         _train_loss_history: list[float] = []
 
-        batch: tuple[Tensor, ...]
         # If the last epoch, leave the progress bar
         leave_bar: bool = epoch == n_epochs - 1
+
+        batch: tuple[Tensor, ...]
         for batch_idx, batch in enumerate(
             batch_bar := tqdm(
                 train_loader,
@@ -339,7 +348,7 @@ def thunder_train(
             else:
                 optimizer.step()
 
-            if scheduler:
+            if scheduler is not None:
                 scheduler.step()
 
             batch_bar.set_postfix(
@@ -363,7 +372,6 @@ def thunder_train(
             model.eval()
             _val_loss_history: list[float] = []
 
-            batch: tuple[Tensor, ...]
             with torch.no_grad():
                 for batch_idx, batch in enumerate(
                     val_bar := tqdm(
@@ -380,9 +388,10 @@ def thunder_train(
                     )
                     loss = model.validation_step(
                         batch, batch_idx=batch_idx, epoch=epoch
-                    )
-                    _val_loss_history.append(float(loss.item()))
-                    val_bar.set_postfix(loss=f"{loss.item():.6f}")
+                    ).item()
+
+                    _val_loss_history.append(float(loss))
+                    val_bar.set_postfix(loss=f"{loss:.6f}")
 
             loss_history["val"].append(np.mean(_val_loss_history))
 
@@ -423,6 +432,6 @@ def thunder_train(
             val_loss=f"{loss_history['val'][-1]:.6f}",
         )
 
-    print("[i] Training completed")
+    logging("[i] Training completed")
 
     return ckpt_dir
