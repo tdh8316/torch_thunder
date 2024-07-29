@@ -73,32 +73,34 @@ def _save_loss_history(
     assert (
         len(loss_history["val"]) == (epoch // val_interval) + 1
     ), "Invalid length for validation loss history"
+    if abort_on_nan:
+        loss_list = np.array([loss_history["train"], loss_history["val"]])
+        if np.isnan(loss_list).any() or np.isinf(loss_list).any():
+            raise ValueError("Loss history contains NaN or Inf values")
 
-    plt.plot(list(range(epoch + 1)), loss_history["train"], label="train")
-    plt.plot(
+    fig, ax_train = plt.subplots()
+    c = "tab:blue"
+    ax_train.set_xlabel("Epoch")
+    ax_train.set_ylabel("Train loss", color=c)
+    ax_train.plot(list(range(epoch + 1)), loss_history["train"], label="train", color=c)
+    ax_train.grid(visible=True)
+    ax_train.legend(loc="upper center")
+    ax_train.tick_params(axis="y", labelcolor=c)
+
+    ax_val = ax_train.twinx()
+    c = "tab:orange"
+    ax_val.set_ylabel("Validation loss", color=c)
+    ax_val.plot(
         list(range(0, epoch + 1, val_interval)),
         loss_history["val"],
         label="validation",
+        color=c,
     )
+    ax_val.grid(None)
+    ax_val.legend(loc="upper right")
+    ax_val.tick_params(axis="y", labelcolor=c)
 
-    y_means = np.array(
-        [np.mean(loss_history["train"]), np.mean(loss_history["val"])],
-    )
-    if np.isnan(y_means).any() or np.isinf(y_means).any():
-        if abort_on_nan:
-            raise ValueError("Loss history contains NaN or Inf values")
-        # Replace NaN or Inf values with 0
-        y_means = np.nan_to_num(y_means, nan=0.0, posinf=0.0, neginf=0.0)
-    y_mins = np.array(
-        [np.min(loss_history["train"]), np.min(loss_history["val"])],
-    )
-    plt.ylim(
-        y_mins.min() - y_means.max() * 0.1,
-        y_means.max() * 2,
-    )
-    plt.title("Loss history")
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
+    plt.title("Loss History")
     plt.grid(visible=True)
     plt.legend()
     plt.tight_layout()
