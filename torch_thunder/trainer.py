@@ -139,7 +139,8 @@ def thunder_train(
     exist_ok: bool = False,
     save_last_ckpt: bool = True,
     save_trainer_args: bool = True,
-    save_loss_csv: bool = True,
+    save_loss_history: bool = True,
+    save_loss_csv: bool = False,
     abort_on_nan: bool = True,
     log_max_vram_usage: bool = False,
     verbose: bool = True,
@@ -185,8 +186,10 @@ def thunder_train(
             only the best checkpoint will be saved.
         save_trainer_args (bool, optional): Save trainer arguments.
             Defaults to True.
-        save_loss_csv (bool, optional): Save loss history as not only a plot but also a csv.
+        save_loss_history (bool, optional): Save loss history plot.
             Defaults to True.
+        save_loss_csv (bool, optional): Save loss history as not only a plot but also a csv.
+            Defaults to False.
         abort_on_nan (bool, optional): Abort if the loss history contains NaN or Inf values.
             Defaults to True.
         log_max_vram_usage (bool, optional): Log the maximum VRAM usage in GB.
@@ -431,14 +434,15 @@ def thunder_train(
                 torch.save(model.state_dict(), f"{ckpt_dir}/{_prev_best_ckpt_name}")
 
             """Save loss history"""
-            _save_loss_history(
-                loss_history,
-                ckpt_dir,
-                epoch,
-                val_interval=ckpt_save_interval,
-                csv=save_loss_csv,
-                abort_on_nan=abort_on_nan,
-            )
+            if save_loss_history:
+                _save_loss_history(
+                    loss_history,
+                    ckpt_dir,
+                    epoch,
+                    val_interval=ckpt_save_interval,
+                    csv=save_loss_csv,
+                    abort_on_nan=abort_on_nan,
+                )
 
             if log_max_vram_usage:
                 gfree, total = torch.cuda.mem_get_info(torch_device.index)
