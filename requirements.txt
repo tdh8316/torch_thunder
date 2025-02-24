@@ -1,5 +1,5 @@
-torch~=2.3.0
-setuptools~=67.8.0
-matplotlib~=3.9.0
-numpy~=1.26.4
-tqdm~=4.65.0
+torch>=2.3.0
+setuptools
+matplotlib>=3.9.0
+numpy>=1.26.4
+tqdm>=4.65.0
