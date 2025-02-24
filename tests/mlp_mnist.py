@@ -1,18 +1,17 @@
 import torch
 from torch import nn, Tensor
 from torch.utils.data import DataLoader
-from torch_thunder import *
+import torch_thunder as tt
 
 hparams = {
     "hidden_size": 512,
-    "dropout": 0.25,
     "batch_size": 256,
     "lr": 1e-3,
-    "epochs": 20,
+    "epochs": 5,
 }
 
 
-class MLP(ThunderModule):
+class MLP(tt.ThunderModule):
     """
     MLP model for MNIST classification
     """
@@ -25,15 +24,10 @@ class MLP(ThunderModule):
 
         self.layers = nn.Sequential(
             nn.Linear(28 * 28, self.hidden_size),
-            nn.SiLU(),
-            nn.Dropout(self.dropout),
-            nn.Linear(self.hidden_size, self.hidden_size // 2),
-            nn.SiLU(),
-            nn.Dropout(self.dropout),
-            nn.Linear(self.hidden_size // 2, self.hidden_size // 4),
-            nn.SiLU(),
-            nn.Dropout(self.dropout),
-            nn.Linear(self.hidden_size // 4, 10),
+            nn.LeakyReLU(),
+            nn.Linear(self.hidden_size, self.hidden_size),
+            nn.LeakyReLU(),
+            nn.Linear(self.hidden_size, 10),
         )
 
     def hyperparameters(self) -> dict:
@@ -43,23 +37,22 @@ class MLP(ThunderModule):
         return torch.nn.functional.cross_entropy(pred, target)
 
     def forward(self, x: Tensor) -> Tensor:
-        x = x.view(-1, 28 * 28)
+        x = x.reshape(-1, 28 * 28)
         return self.layers(x)
 
-    def training_step(self, batch: tuple[Tensor, ...], **_) -> Loss:
+    def training_step(self, batch: tuple[Tensor, ...], **_) -> tt.Loss:
         x, y = batch
         pred = self(x)
         loss = self.loss_fn(pred, y)
         return loss
 
-    def validation_step(self, batch: tuple[Tensor, ...], **_) -> Loss:
-        _, y = batch
-        pred = self.prediction_step(batch)
+    def validation_step(self, batch: tuple[Tensor, ...], **_) -> tt.Loss:
+        x, y = batch
+        pred = self.prediction_step(x)
         loss = self.loss_fn(pred, y)
         return loss
 
-    def prediction_step(self, batch: tuple[Tensor, ...], **_) -> Tensor:
-        x, _ = batch
+    def prediction_step(self, x: Tensor) -> Tensor:
         pred = self(x)
         return pred
 
@@ -94,7 +87,7 @@ def main():
     model = MLP(hparams)
     optimizer = torch.optim.AdamW(model.parameters(), lr=hparams["lr"])
 
-    ckpt_dir = thunder_train(
+    ckpt_dir = tt.thunder_train(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
@@ -105,7 +98,7 @@ def main():
     )
 
     if ckpt_dir:
-        save_hparams_from_dict(f"{ckpt_dir}/hparams.json", hparams)
+        tt.save_hparams_from_dict(f"{ckpt_dir}/hparams.json", hparams)
 
 
 if __name__ == "__main__":
