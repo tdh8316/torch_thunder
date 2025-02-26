@@ -7,7 +7,7 @@ hparams = {
     "hidden_size": 512,
     "batch_size": 256,
     "lr": 1e-3,
-    "epochs": 5,
+    "epochs": 10,
 }
 
 
@@ -20,7 +20,6 @@ class MLP(tt.ThunderModule):
         super(MLP, self).__init__()
 
         self.hidden_size = args["hidden_size"]
-        self.dropout = args["dropout"]
 
         self.layers = nn.Sequential(
             nn.Linear(28 * 28, self.hidden_size),
@@ -94,7 +93,9 @@ def main():
         optimizer=optimizer,
         n_epochs=hparams["epochs"],
         ckpt_subdir="mlp_mnist",
-        device="cpu",
+        save_last_ckpt=False,
+        device="mps",
+        exist_ok=True,
     )
 
     if ckpt_dir:

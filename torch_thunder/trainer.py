@@ -1,4 +1,5 @@
 import os
+import time
 from typing import Optional, Literal
 
 import matplotlib.pyplot as plt
@@ -25,7 +26,7 @@ def logging(
         print(message)
 
 
-def _get_model_params(model: nn.Module) -> str:
+def get_model_params(model: nn.Module) -> str:
     """
     Returns the number of parameters in the model in a human-readable format
 
@@ -52,18 +53,18 @@ def _save_loss_history(
     ckpt_dir: str,
     epoch: int,
     val_interval: int,
-    csv: bool = True,
+    save_csv: bool = True,
     abort_on_nan: bool = True,
 ):
     """
-    Save the loss history plot and its data as a csv (optional)
+    Save the loss history plot and the data as a csv (optional)
 
     Args:
         loss_history (dict[str, list[float]]): Loss history data
         ckpt_dir (str): Checkpoint directory
         epoch (int): Current epoch
         val_interval (int): Validation interval
-        csv (bool): Save not only the plot but also the data as a csv.
+        save_csv (bool): Save not only the plot but also the data as a csv.
             Defaults to True.
         abort_on_nan (bool): Abort if the loss history contains NaN or Inf values.
     """
@@ -107,7 +108,7 @@ def _save_loss_history(
     plt.savefig(f"{ckpt_dir}/loss_history.png")
     plt.close()
 
-    if csv:
+    if save_csv:
         with open(f"{ckpt_dir}/loss_history.csv", "w") as f:
             f.write("epoch,train,val\n")
             for i in range(epoch):
@@ -203,7 +204,7 @@ def thunder_train(
     global _verbose
     _verbose = verbose
 
-    logging("[i] Training model parameters: " + _get_model_params(model))
+    logging("[i] The number of model parameters: " + get_model_params(model))
 
     assert isinstance(
         model, (ThunderModule, OptimizedModule)
@@ -211,7 +212,7 @@ def thunder_train(
 
     assert (
         clip_grad_value is None or clip_grad_norm is None
-    ), "Only one of clip_grad_value or clip_grad_norm can be set"
+    ), "Either clip_grad_value or clip_grad_norm can be set, not both"
 
     ckpt_dir = f"{ckpt_basedir}/{ckpt_subdir}/" if ckpt_subdir else f"{ckpt_basedir}/"
     if os.path.exists(ckpt_dir):
@@ -231,44 +232,27 @@ def thunder_train(
             )
     else:
         logging(f"[i] Checkpoint directory: {ckpt_dir.rstrip('/')}")
-
     os.makedirs(ckpt_dir, exist_ok=True)
 
     model_class_name = model.__class__.__name__
     is_model_compiled = isinstance(model, OptimizedModule)
     if is_model_compiled:
-        model: OptimizedModule
         model_class_name = getattr(model, "_orig_mod").__class__.__name__
 
     if compile_model and is_model_compiled:
-        logging("[i] Model is already compiled. Skipping...")
+        logging("[i] Model is already compiled; skipping compilation.")
     elif compile_model and not is_model_compiled:
-        assert hasattr(torch, "compile"), "[!] Could not find 'torch.compile'"
+        assert hasattr(torch, "compile"), "[!] Couldn't find `torch.compile`"
         try:
             model: ThunderModule = torch.compile(  # type: ignore
                 model,
                 **(compile_options or {}),
             )
-            is_model_compiled = True
         except Exception as e:
             logging(f"[!] Model compilation failed: {e}")
+            return None
         else:
             logging("[i] Model compiled successfully")
-
-    if save_trainer_args:
-        with open(f"{ckpt_dir}/trainer.txt", "w") as f:
-            f.write(
-                f"model: {model_class_name}\n"
-                f"params: {_get_model_params(model)}\n"
-                f"epochs: {n_epochs}\n"
-                f"optimizer: {optimizer.__class__.__name__}\n"
-                f"clip_grad_value: {clip_grad_value}\n"
-                f"clip_grad_norm: {clip_grad_norm}\n"
-                f"scheduler: {scheduler.__class__.__name__ if scheduler else None}\n"
-                f"compile_model: {compile_model} (actually compiled? {is_model_compiled})\n"
-                f"device: {device}\n"
-                f"use_amp: {use_amp}\n"
-            )
 
     if device == "cuda":
         assert torch.cuda.is_available(), "CUDA is not available"
@@ -286,6 +270,7 @@ def thunder_train(
                     "and/or you do not have an MPS-enabled device on this machine."
                 )
     torch_device: torch.device = torch.device(device)
+
     if torch_device.type == "cuda":
         _name = torch.cuda.get_device_name(0)
         _ram = torch.cuda.get_device_properties(0).total_memory / 1024**3
@@ -293,10 +278,27 @@ def thunder_train(
     elif torch_device.type == "mps":
         logging("[i] Using MPS backend")
     else:
-        logging("[!] Using CPUs can result in slower training.")
+        logging("[!] Using CPU backend")
     model.to(torch_device)
 
-    scaler = torch.cuda.amp.GradScaler() if use_amp else None
+    if save_trainer_args:
+        with open(f"{ckpt_dir}/trainer_hparams.txt", "w") as f:
+            f.write(
+                f"model: {model_class_name}\n"
+                f"params: {get_model_params(model)}\n"
+                f"epochs: {n_epochs}\n"
+                f"optimizer: {optimizer.__class__.__name__}\n"
+                f"ckpt_save_interval: {ckpt_save_interval}\n"
+                f"clip_grad_value: {clip_grad_value}\n"
+                f"clip_grad_norm: {clip_grad_norm}\n"
+                f"scheduler: {scheduler.__class__.__name__ if scheduler else None}\n"
+                f"compile_model: {compile_model}\n"
+                f"compile_options: {compile_options}\n"
+                f"device: {device}\n"
+                f"use_amp: {use_amp}\n"
+            )
+
+    amp_grad_scaler = torch.cuda.amp.GradScaler() if use_amp else None
 
     loss_history = {
         "train": [],
@@ -313,16 +315,15 @@ def thunder_train(
     _prev_last_ckpt_name: str = ""
     _prev_best_ckpt_name: str = ""
 
-    max_vram_usage: float = 0.0  # GB
+    max_vram_usage: float = 0.0  # in GB
+
+    start_time = time.time()
 
     """Training loop"""
     for epoch in epoch_bar:
         epoch_bar.set_description(f"Epoch {epoch}")
         model.train()
-        _train_loss_history: list[float] = []
-
-        # If the last epoch, leave the progress bar
-        leave_bar: bool = epoch == n_epochs - 1
+        _train_loss_minibatch: list[float] = []
 
         batch: tuple[Tensor, ...]
         for batch_idx, batch in enumerate(
@@ -330,7 +331,7 @@ def thunder_train(
                 train_loader,
                 desc="Batch",
                 ascii=True,
-                leave=leave_bar,
+                leave=epoch == n_epochs - 1,
                 position=1,
             ),
         ):
@@ -342,16 +343,16 @@ def thunder_train(
             if use_amp:
                 with torch.autocast(device_type=torch_device.type):
                     loss = model.training_step(batch, batch_idx=batch_idx, epoch=epoch)
-                scaler.scale(loss).backward()
+                amp_grad_scaler.scale(loss).backward()
             else:
                 loss = model.training_step(batch, batch_idx=batch_idx, epoch=epoch)
                 loss.backward()
 
-            _train_loss_history.append(float(loss.item()))
+            _train_loss_minibatch.append(float(loss.item()))
 
             # If using AMP, unscale the gradients before clipping
             if use_amp and (clip_grad_value is not None or clip_grad_norm is not None):
-                scaler.unscale_(optimizer)
+                amp_grad_scaler.unscale_(optimizer)
 
             if clip_grad_norm is not None:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
@@ -359,8 +360,8 @@ def thunder_train(
                 torch.nn.utils.clip_grad_value_(model.parameters(), clip_grad_value)
 
             if use_amp:
-                scaler.step(optimizer)
-                scaler.update()
+                amp_grad_scaler.step(optimizer)
+                amp_grad_scaler.update()
             else:
                 optimizer.step()
 
@@ -372,7 +373,7 @@ def thunder_train(
                 lr=f"{optimizer.param_groups[0]['lr']:.6f}",
             )
 
-        loss_history["train"].append(np.mean(_train_loss_history))
+        loss_history["train"].append(np.mean(_train_loss_minibatch))
         if np.isnan(loss_history["train"][-1]):
             tqdm.write("[!] Training loss contains NaN values!")
         if np.isinf(loss_history["train"][-1]):
@@ -382,7 +383,7 @@ def thunder_train(
         Validation/Save step
 
         Condition 1: Every ckpt_save_interval epochs
-        Condition 2: The last epoch
+        Condition 2: When the last epoch
         """
         if (epoch % ckpt_save_interval == 0) or (epoch == n_epochs - 1):
             model.eval()
@@ -440,11 +441,11 @@ def thunder_train(
                     ckpt_dir,
                     epoch,
                     val_interval=ckpt_save_interval,
-                    csv=save_loss_csv,
+                    save_csv=save_loss_csv,
                     abort_on_nan=abort_on_nan,
                 )
 
-            if log_max_vram_usage:
+            if log_max_vram_usage and torch_device.type == "cuda":
                 gfree, total = torch.cuda.mem_get_info(torch_device.index)
                 max_vram_usage = max(max_vram_usage, (total - gfree) / 1024**3)
 
@@ -453,10 +454,15 @@ def thunder_train(
             val_loss=f"{loss_history['val'][-1]:.6f}",
         )
 
-    if log_max_vram_usage:
-        with open(f"{ckpt_dir}/trainer.txt", "a") as f:
-            f.write(f"max_vram_usage: {max_vram_usage:.2f}GB\n")
+    end_time = time.time()
+    total_time_str = time.strftime("%H:%M:%S", time.gmtime(end_time - start_time))
 
-    logging("[i] Training completed")
+    with open(f"{ckpt_dir}/trainer_hparams.txt", "a") as f:
+        f.write("[i] Training completed in " + total_time_str + "\n")
+        if log_max_vram_usage and torch_device.type == "cuda":
+            f.write(f"max_vram_usage: {max_vram_usage:.2f}GB\n")
+            logging(f"[i] Maximum VRAM usage: {max_vram_usage:.2f}GB")
+
+    logging("[i] Training completed in " + total_time_str)
 
     return ckpt_dir
