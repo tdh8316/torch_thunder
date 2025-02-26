@@ -19,11 +19,16 @@ _verbose = False
 
 def logging(
     message: str,
+    tqdm_write: bool = False,
+    no_stdout: bool = False,
 ):
     # TODO: Add logging to file
 
     if _verbose:
-        print(message)
+        if tqdm_write:
+            tqdm.write(message)
+        elif not no_stdout:
+            print(message)
 
 
 def get_model_params(model: nn.Module) -> str:
@@ -375,9 +380,9 @@ def thunder_train(
 
         loss_history["train"].append(np.mean(_train_loss_minibatch))
         if np.isnan(loss_history["train"][-1]):
-            tqdm.write("[!] Training loss contains NaN values!")
+            logging("[!] Training loss contains NaN values!", tqdm_write=True)
         if np.isinf(loss_history["train"][-1]):
-            tqdm.write("[!] Training loss contains Inf values!")
+            logging("[!] Training loss contains Inf values!", tqdm_write=True)
 
         """
         Validation/Save step
