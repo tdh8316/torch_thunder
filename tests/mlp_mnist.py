@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 import torch_thunder as tt
 
 hparams = {
-    "hidden_size": 512,
+    "hidden_size": 256,
     "batch_size": 256,
     "lr": 1e-3,
     "epochs": 10,
@@ -22,11 +22,11 @@ class MLP(tt.ThunderModule):
         self.hidden_size = args["hidden_size"]
 
         self.layers = nn.Sequential(
-            nn.Linear(28 * 28, self.hidden_size),
-            nn.LeakyReLU(),
-            nn.Linear(self.hidden_size, self.hidden_size),
-            nn.LeakyReLU(),
-            nn.Linear(self.hidden_size, 10),
+            nn.Linear(28 * 28, self.hidden_size, bias=False),
+            nn.SiLU(),
+            nn.Linear(self.hidden_size, self.hidden_size, bias=False),
+            nn.SiLU(),
+            nn.Linear(self.hidden_size, 10, bias=False),
         )
 
     def hyperparameters(self) -> dict:
@@ -94,8 +94,9 @@ def main():
         n_epochs=hparams["epochs"],
         ckpt_subdir="mlp_mnist",
         save_last_ckpt=False,
-        device="mps",
+        device="cpu",
         exist_ok=True,
+        compile_model=False,
     )
 
     if ckpt_dir:

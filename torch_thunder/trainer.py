@@ -303,7 +303,7 @@ def thunder_train(
                 f"use_amp: {use_amp}\n"
             )
 
-    amp_grad_scaler = torch.cuda.amp.GradScaler() if use_amp else None
+    amp_grad_scaler = torch.amp.GradScaler() if use_amp else None
 
     loss_history = {
         "train": [],
