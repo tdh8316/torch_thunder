@@ -144,6 +144,7 @@ def thunder_train(
     use_amp: bool = False,
     exist_ok: bool = False,
     log_every_iter: int = -1,
+    save_every_iter: int = -1,
     save_last_ckpt: bool = True,
     save_trainer_args: bool = True,
     save_loss_history: bool = True,
@@ -188,6 +189,8 @@ def thunder_train(
         exist_ok (bool, optional): Overwrite the existing checkpoint directory.
             Defaults to False.
         log_every_iter (int, optional): Log every `log_every_iter` iterations.
+            Defaults to -1 (Disabled).
+        save_every_iter (int, optional): Save every `save_every_iter` iterations.
             Defaults to -1 (Disabled).
         save_last_ckpt (bool, optional): Save the last checkpoint.
             Defaults to True.
@@ -387,6 +390,17 @@ def thunder_train(
                     f"Loss={loss.item():.6f}, "
                     f"LR={optimizer.param_groups[0]['lr']:.6f}",
                     tqdm_write=True,
+                )
+
+            if save_every_iter > 0 and batch_idx % save_every_iter == 0:
+                _iter_ckpt_name = f"iter={batch_idx}_" + ckpt_name_format.format(
+                    epoch=epoch,
+                    val_loss=(
+                        f"{loss_history['val'][-1]:.6f}"
+                        if len(loss_history["val"]) > 0
+                        else 0.0
+                    ),
+                    train_loss=f"{loss.item():.6f}",
                 )
 
         loss_history["train"].append(np.mean(_train_loss_minibatch))
