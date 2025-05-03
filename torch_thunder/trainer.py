@@ -143,6 +143,7 @@ def thunder_train(
     device: Literal["cuda", "cpu", "mps"] = "cuda",
     use_amp: bool = False,
     exist_ok: bool = False,
+    log_every_iter: int = -1,
     save_last_ckpt: bool = True,
     save_trainer_args: bool = True,
     save_loss_history: bool = True,
@@ -186,6 +187,8 @@ def thunder_train(
             Defaults to False.
         exist_ok (bool, optional): Overwrite the existing checkpoint directory.
             Defaults to False.
+        log_every_iter (int, optional): Log every `log_every_iter` iterations.
+            Defaults to -1 (Disabled).
         save_last_ckpt (bool, optional): Save the last checkpoint.
             Defaults to True.
             Otherwise, the last checkpoint will be removed and
@@ -377,6 +380,14 @@ def thunder_train(
                 loss=f"{loss.item():.6f}",
                 lr=f"{optimizer.param_groups[0]['lr']:.6f}",
             )
+
+            if log_every_iter > 0 and batch_idx % log_every_iter == 0:
+                logging(
+                    f"[i] Epoch {epoch}, iteration {batch_idx}: "
+                    f"Loss={loss.item():.6f}, "
+                    f"LR={optimizer.param_groups[0]['lr']:.6f}",
+                    tqdm_write=True,
+                )
 
         loss_history["train"].append(np.mean(_train_loss_minibatch))
         if np.isnan(loss_history["train"][-1]):
