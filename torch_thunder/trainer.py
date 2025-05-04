@@ -402,6 +402,7 @@ def thunder_train(
                     ),
                     train_loss=f"{loss.item():.6f}",
                 )
+                torch.save(model.state_dict(), f"{ckpt_dir}/{_iter_ckpt_name}")
 
         loss_history["train"].append(np.mean(_train_loss_minibatch))
         if np.isnan(loss_history["train"][-1]):
